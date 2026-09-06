@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="luminaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe" />
+      <stop offset="100%" stop-color="#4facfe" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0e131f" />
+      <stop offset="100%" stop-color="#08090c" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Container -->
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#bgGrad)" stroke="url(#luminaGrad)" stroke-width="2.5" />
+
+  <!-- Transparency Grid Pattern -->
+  <path d="M16 16h8v8h-8zM32 16h8v8h-8zM24 24h8v8h-8zM16 32h8v8h-8zM32 32h8v8h-8zM24 40h8v8h-8z" fill="rgba(255,255,255,0.08)" />
+
+  <!-- Lightning Bolt -->
+  <path d="M35 12L21 33h11l-3 17 14-21H31l4-17z" fill="url(#luminaGrad)" filter="url(#glow)" />
+
+  <!-- Sparkles -->
+  <circle cx="16" cy="18" r="2" fill="#00f2fe" />
+  <circle cx="48" cy="46" r="1.8" fill="#4facfe" />
+</svg>
