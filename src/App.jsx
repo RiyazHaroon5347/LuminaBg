@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { UploadCloud, Image as ImageIcon, Download, Loader2, Sparkles, RefreshCw, Zap, ShieldCheck, Server, AlertCircle, Palette, FileImage, Check, Pipette } from 'lucide-react';
 import './index.css';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+
 
 const PRESET_COLORS = [
   { id: 'white', name: 'White', color: '#ffffff' },
