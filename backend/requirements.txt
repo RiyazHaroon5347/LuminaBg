@@ -1,6 +1,10 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
 fastapi>=0.100.0
 uvicorn>=0.20.0
 python-multipart>=0.0.6
-rembg>=2.0.50
 pillow>=9.0.0
 onnxruntime>=1.15.0
+rembg>=2.0.50
+

@@ -2,7 +2,7 @@ import os
 import io
 import time
 
-# Set model download directory to D: drive to prevent C: drive low space errors
+# Set model download directory
 MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "models"))
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.environ["U2NET_HOME"] = MODELS_DIR
@@ -15,7 +15,7 @@ from PIL import Image
 
 app = FastAPI(title="Lumina BG API", description="Instant High-Accuracy Background Removal Engine")
 
-# Enable CORS for frontend Vite application
+# Enable CORS for frontend application
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,15 +24,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Pre-initialize rembg session for instant sub-second inference
-print(f"Loading background removal AI engine (Models location: {MODELS_DIR})...")
-try:
-    session = new_session("isnet-general-use")
-    print("AI Engine loaded successfully (isnet-general-use)")
-except Exception as e:
-    print(f"Fallback to default u2net session due to: {e}")
-    session = new_session("u2net")
+# Global session instance (Lazy-loaded on first request to prevent boot timeouts and OOM)
+_session = None
 
+def get_session():
+    global _session
+    if _session is None:
+        print(f"Loading lightweight background removal AI engine (u2netp)...")
+        try:
+            # u2netp is ultra-lightweight (~40MB model size) optimized for CPU environments with <512MB RAM
+            _session = new_session("u2netp")
+            print("AI Engine loaded successfully (u2netp)")
+        except Exception as e:
+            print(f"Fallback to default u2net session due to: {e}")
+            _session = new_session("u2net")
+    return _session
+
+@app.get("/")
 @app.get("/api/health")
 def health_check():
     return {
@@ -53,7 +61,9 @@ async def remove_background(
         start_time = time.time()
         input_bytes = await file.read()
         
-        # Remove background instantly with rembg session
+        # Get lazy-loaded lightweight session
+        session = get_session()
+
         output_bytes = remove(
             input_bytes,
             session=session,
@@ -82,4 +92,6 @@ async def remove_background(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
+
