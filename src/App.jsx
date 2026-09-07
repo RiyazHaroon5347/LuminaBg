@@ -76,7 +76,14 @@ function App() {
     isCheckingRef.current = true;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    // Allow 30 seconds for Render free-tier cold-start health checks
+    const timeoutId = setTimeout(() => {
+      try {
+        controller.abort(new Error('Health check timeout'));
+      } catch (e) {
+        controller.abort();
+      }
+    }, 30000);
 
     try {
       const res = await fetch(`${API_BASE}/api/health`, { signal: controller.signal });
