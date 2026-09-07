@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { UploadCloud, Image as ImageIcon, Download, Loader2, Sparkles, RefreshCw, Zap, ShieldCheck, Server, AlertCircle, Palette, FileImage, Check, Pipette } from 'lucide-react';
 import './index.css';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE || 'https://luminabg.onrender.com';
 
 
 const PRESET_COLORS = [
@@ -68,10 +68,19 @@ function App() {
 
   const canvasRef = useRef(null);
 
+  const isCheckingRef = useRef(false);
+
   // Check backend server health on mount
   const checkHealth = useCallback(async () => {
+    if (isCheckingRef.current) return;
+    isCheckingRef.current = true;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
     try {
-      const res = await fetch(`${API_BASE}/api/health`);
+      const res = await fetch(`${API_BASE}/api/health`, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (res.ok) {
         setServerConnected(true);
         setErrorMsg(null);
@@ -79,15 +88,20 @@ function App() {
         setServerConnected(false);
       }
     } catch (e) {
+      clearTimeout(timeoutId);
       setServerConnected(false);
+    } finally {
+      isCheckingRef.current = false;
     }
   }, []);
 
   useEffect(() => {
     checkHealth();
-    const interval = setInterval(checkHealth, 5000);
+    // Poll every 30s when online, every 8s when offline
+    const intervalMs = serverConnected ? 30000 : 8000;
+    const interval = setInterval(checkHealth, intervalMs);
     return () => clearInterval(interval);
-  }, [checkHealth]);
+  }, [checkHealth, serverConnected]);
 
   const removeBackground = async (fileToProcess, matting = alphaMatting) => {
     if (!fileToProcess) return;
@@ -100,11 +114,18 @@ function App() {
     const formData = new FormData();
     formData.append('file', fileToProcess);
 
+    const controller = new AbortController();
+    // Allow up to 120 seconds for Render free tier cold-start + processing
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+
     try {
       const response = await fetch(`${API_BASE}/api/remove-bg?alpha_matting=${matting}`, {
         method: 'POST',
         body: formData,
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
@@ -117,19 +138,67 @@ function App() {
       }
 
       const arrayBuffer = await response.arrayBuffer();
-      // Explicitly construct image/png Blob
       const blob = new Blob([arrayBuffer], { type: 'image/png' });
       const resultObjectUrl = URL.createObjectURL(blob);
       setResultUrl(resultObjectUrl);
+      setServerConnected(true);
     } catch (err) {
+      clearTimeout(timeoutId);
       console.error('Background removal error:', err);
-      setErrorMsg(err.message || 'Failed to remove background. Please make sure the Python server is running.');
+      if (err.name === 'AbortError') {
+        setErrorMsg('Request timed out. Render backend may still be waking up. Please try again.');
+      } else {
+        setErrorMsg(err.message || 'Failed to remove background. Please verify backend connection.');
+      }
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleFile = (file) => {
+  const preprocessImageFile = (file, maxDimension = 1600) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const { width, height } = img;
+        if (width <= maxDimension && height <= maxDimension) {
+          resolve(file);
+          return;
+        }
+        let newW = width;
+        let newH = height;
+        if (width > height) {
+          newW = maxDimension;
+          newH = Math.round((height * maxDimension) / width);
+        } else {
+          newH = maxDimension;
+          newW = Math.round((width * maxDimension) / height);
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = newW;
+        canvas.height = newH;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, newW, newH);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          const resizedFile = new File([blob], file.name, { type: file.type || 'image/png' });
+          resolve(resizedFile);
+        }, file.type || 'image/png', 0.92);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      };
+      img.src = url;
+    });
+  };
+
+  const handleFile = async (file) => {
     if (!file.type.startsWith('image/')) {
       alert('Please upload a valid image file (JPG, PNG, WEBP).');
       return;
@@ -138,8 +207,9 @@ function App() {
     const url = URL.createObjectURL(file);
     setImageUrl(url);
     
-    // Instant processing
-    removeBackground(file, alphaMatting);
+    // Quick client-side downscale to prevent large payload network bottlenecks & timeout
+    const processedFile = await preprocessImageFile(file);
+    removeBackground(processedFile, alphaMatting);
   };
 
   const handleDrag = useCallback((e) => {
@@ -287,7 +357,11 @@ function App() {
           <div className={`status-pill ${serverConnected ? 'online' : serverConnected === false ? 'offline' : 'checking'}`}>
             <Server size={14} />
             <span>
-              {serverConnected ? 'Server Online (Instant Engine)' : serverConnected === false ? 'Server Offline' : 'Connecting...'}
+              {serverConnected 
+                ? (API_BASE.includes('onrender.com') ? 'Render Backend Online' : 'Local Backend Online') 
+                : serverConnected === false 
+                ? 'Backend Disconnected' 
+                : 'Connecting to Backend...'}
             </span>
           </div>
         </div>
@@ -299,8 +373,22 @@ function App() {
           <div className="warning-banner">
             <AlertCircle size={20} />
             <div>
-              <strong>Python Backend Not Running:</strong> Please start the backend by navigating to the <code>backend/</code> folder and running:
-              <pre className="inline-code">python -m uvicorn main:app --reload --port 8000</pre>
+              {API_BASE.includes('onrender.com') ? (
+                <>
+                  <strong>Render Backend Disconnected / Waking Up:</strong> Connecting to <code>{API_BASE}</code>... Render free tier services may take 30–50 seconds to spin up if idle.
+                  <button 
+                    onClick={checkHealth} 
+                    style={{ marginLeft: '12px', padding: '4px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', cursor: 'pointer', fontSize: '12px' }}
+                  >
+                    Retry Now
+                  </button>
+                </>
+              ) : (
+                <>
+                  <strong>Python Backend Not Running:</strong> Please start the backend by navigating to the <code>backend/</code> folder and running:
+                  <pre className="inline-code">python -m uvicorn main:app --reload --port 8000</pre>
+                </>
+              )}
             </div>
           </div>
         )}
