@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { UploadCloud, Image as ImageIcon, Download, Loader2, Sparkles, RefreshCw, Zap, ShieldCheck, Server, AlertCircle, Palette, FileImage, Check, Pipette } from 'lucide-react';
 import './index.css';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'https://luminabg.onrender.com';
+const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.DEV ? 'http://localhost:8000' : 'https://luminabg.onrender.com');
 
 
 const PRESET_COLORS = [

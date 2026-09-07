@@ -13,13 +13,21 @@ from fastapi.responses import Response
 
 app = FastAPI(title="Lumina BG API", description="Instant High-Accuracy Background Removal Engine")
 
-# Enable CORS for frontend application
+# Enable CORS for frontend application (Vercel production & localhost)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://lumina-bg.vercel.app",
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://localhost:8000",
+    ],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Processing-Time", "Content-Type", "Content-Disposition"]
 )
 
 # Global session instance (Lazy-loaded on first request to prevent boot timeouts and OOM)
